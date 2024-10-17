@@ -1,6 +1,13 @@
-from fastapi import FastAPI, Body, HTTPException
-from pydantic import BaseModel
+from typing import List
 
+from fastapi import FastAPI, Body, HTTPException, Depends
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from database.connection import get_db
+from database.orm import ToDo
+from database.repository import get_todos, get_todo_by_todo_id
+from schema.response import ListToDoResponse, ToDoSchema
 
 app = FastAPI()
 
@@ -30,18 +37,29 @@ todo_data = {
 
 
 @app.get("/todos", status_code=200)
-def get_todos_handler(order: str | None = None):
-    ret = list(todo_data.values())
+def get_todos_handler(
+        order: str | None = None,
+        session: Session = Depends(get_db),
+):
+    todos: List[ToDo] = get_todos(session=session)
+
     if order and order == "DESC":
-        return ret[::-1]
-    return ret
+        return ListToDoResponse(
+            todos=[ToDoSchema.from_orm(todo) for todo in todos[::-1]]
+        )
+    return ListToDoResponse(
+        todos=[ToDoSchema.from_orm(todo) for todo in todos]
+    )
 
 
 @app.get("/todos/{todo_id}", status_code=200)
-def get_todo_handler(todo_id: int):
-    todo = todo_data.get(todo_id)
+def get_todo_handler(
+    todo_id: int,
+    session: Session = Depends(get_db)
+) -> ToDoSchema:
+    todo: ToDo | None = get_todo_by_todo_id(session=session, todo_id=todo_id)
     if todo:
-        return todo
+        return ToDoSchema.from_orm(todo)
     raise HTTPException(status_code=404, detail="ToDo Not Found")
 
 
